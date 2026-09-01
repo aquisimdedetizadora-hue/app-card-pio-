@@ -1,5 +1,6 @@
 import { Restaurant, Category, Product, AddonGroup, Order, User } from '../types';
 import { initialRestaurant, initialCategories, initialProducts, initialAddonGroups, initialOrders } from '../data/initialData';
+import { normalizeSlug } from './restaurantUrl';
 
 const STORAGE_KEYS = {
   USERS: 'menuzap_users_v1',
@@ -87,8 +88,13 @@ export const StorageService = {
     return this.getRestaurants().find(r => r.id === id);
   },
   getRestaurantBySlug(slug: string): Restaurant | undefined {
-    const cleanSlug = slug.trim().toLowerCase();
-    return this.getRestaurants().find(r => r.settings.slug.trim().toLowerCase() === cleanSlug);
+    if (!slug) return undefined;
+    const cleanSlug = normalizeSlug(slug);
+    if (!cleanSlug) return undefined;
+    return this.getRestaurants().find(r => {
+      const rSlug = normalizeSlug(r.settings?.slug);
+      return rSlug === cleanSlug;
+    });
   },
   saveRestaurant(restaurant: Restaurant): void {
     const restaurants = this.getRestaurants();

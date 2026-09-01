@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../common/Toast';
+import { StorageService } from '../../services/storage';
+import { normalizeSlug, getRestaurantPublicUrl } from '../../services/restaurantUrl';
 import { Restaurant, BusinessHour, PaymentSettings, DeliverySettings, RestaurantCategory } from '../../types';
 
 const CATEGORIES_LIST: RestaurantCategory[] = [
@@ -84,14 +86,21 @@ export const SettingsTab: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const cleanSlug = normalizeSlug(slug) || normalizeSlug(name) || currentRestaurant.settings.slug;
+
+    // Check if another restaurant uses this slug
+    const existingWithSlug = StorageService.getRestaurantBySlug(cleanSlug);
+    if (existingWithSlug && existingWithSlug.id !== currentRestaurant.id) {
+      showToast('⚠️ Este link/slug já está sendo utilizado por outro estabelecimento. Escolha outro.');
+      return;
+    }
 
     const updatedRestaurant: Restaurant = {
       ...currentRestaurant,
       settings: {
         ...currentRestaurant.settings,
         name: name.trim(),
-        slug: cleanSlug || currentRestaurant.settings.slug,
+        slug: cleanSlug,
         category,
         description: description.trim(),
         logoUrl: logoUrl.trim(),

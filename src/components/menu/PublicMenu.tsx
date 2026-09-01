@@ -1,10 +1,9 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   ShoppingBag, 
   Clock, 
   MapPin, 
-  Phone, 
   Instagram, 
   Sparkles, 
   Star, 
@@ -12,14 +11,16 @@ import {
   AlertCircle,
   MessageSquare,
   Share2,
-  CheckCircle2,
-  ChevronRight,
-  Info
+  Copy,
+  Info,
+  ArrowLeft,
+  UtensilsCrossed
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { StorageService } from '../../services/storage';
 import { getStoreStatus, getTodaySchedule } from '../../services/storeStatus';
 import { formatCurrency, cleanPhone } from '../../services/whatsapp';
+import { getRestaurantPublicUrl, getRestaurantWhatsAppShareUrl, updateRestaurantMetaTags } from '../../services/restaurantUrl';
 import { ProductModal } from './ProductModal';
 import { CartDrawer } from './CartDrawer';
 import { CheckoutModal } from './CheckoutModal';
@@ -40,6 +41,7 @@ export const PublicMenu: React.FC<PublicMenuProps> = ({ slug, tableNumber, onNav
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [addonGroups, setAddonGroups] = useState<AddonGroup[]>([]);
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
   // State
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,16 +51,32 @@ export const PublicMenu: React.FC<PublicMenuProps> = ({ slug, tableNumber, onNav
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [showHoursModal, setShowHoursModal] = useState(false);
 
-  // Load data for this restaurant slug
+  // Load data for this restaurant slug without any fallback to demo
   useEffect(() => {
-    const rest = StorageService.getRestaurantBySlug(slug) || StorageService.getRestaurants()[0];
+    setIsLoaded(false);
+    if (!slug) {
+      setRestaurant(null);
+      updateRestaurantMetaTags(null);
+      setIsLoaded(true);
+      return;
+    }
+
+    const rest = StorageService.getRestaurantBySlug(slug);
     if (rest) {
       setRestaurant(rest);
       setCategories(StorageService.getCategories(rest.id).filter(c => c.isActive));
       setProducts(StorageService.getProducts(rest.id));
       setAddonGroups(StorageService.getAddonGroups(rest.id));
+      updateRestaurantMetaTags(rest, { tableNumber });
+    } else {
+      setRestaurant(null);
+      setCategories([]);
+      setProducts([]);
+      setAddonGroups([]);
+      updateRestaurantMetaTags(null);
     }
-  }, [slug]);
+    setIsLoaded(true);
+  }, [slug, tableNumber]);
 
   const storeStatus = useMemo(() => {
     if (!restaurant) return { isOpen: false, message: 'Carregando...', reason: 'manual' as const };
@@ -94,18 +112,22 @@ export const PublicMenu: React.FC<PublicMenuProps> = ({ slug, tableNumber, onNav
   };
 
   const handleShareMenu = () => {
+    if (!restaurant) return;
+    const shareUrl = getRestaurantPublicUrl(restaurant, { tableNumber });
+    const shareData = {
+      title: `${restaurant.settings.name} — Cardápio Digital`,
+      text: `Confira o cardápio digital de ${restaurant.settings.name}:`,
+      url: shareUrl,
+    };
+
     if (navigator.share) {
-      navigator.share({
-        title: restaurant?.settings.name || 'Cardápio Digital',
-        text: `Confira o cardápio digital de ${restaurant?.settings.name}:`,
-        url: window.location.href,
-      }).catch(() => {
-        navigator.clipboard.writeText(window.location.href);
-        showToast('Link copiado para a área de transferência!');
+      navigator.share(shareData).catch(() => {
+        navigator.clipboard.writeText(shareUrl);
+        showToast('📋 Link do cardápio copiado!');
       });
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      showToast('Link copiado para a área de transferência!');
+      navigator.clipboard.writeText(shareUrl);
+      showToast('📋 Link do cardápio copiado!');
     }
   };
 
@@ -116,19 +138,49 @@ export const PublicMenu: React.FC<PublicMenuProps> = ({ slug, tableNumber, onNav
     window.open(`https://api.whatsapp.com/send?phone=${cleanNum}&text=${msg}`, '_blank');
   };
 
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <div className="w-9 h-9 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-400">Carregando cardápio...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!restaurant) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4">
-        <div className="text-center space-y-3">
-          <p className="text-sm text-slate-400">Restaurante não encontrado.</p>
-          {onNavigate && (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 font-sans">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-5 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+            <UtensilsCrossed className="w-8 h-8" />
+          </div>
+
+          <div>
+            <h1 className="text-xl font-bold font-display text-white">
+              Cardápio não encontrado
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-2 leading-relaxed">
+              O estabelecimento com o endereço <span className="text-emerald-400 font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800">/r/{slug}</span> não foi encontrado ou não está disponível.
+            </p>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
             <button
-              onClick={() => onNavigate('/')}
-              className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs"
+              onClick={() => onNavigate ? onNavigate('/') : (window.location.hash = '/')}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2"
             >
-              Ir para a Página Inicial
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar ao Início</span>
             </button>
-          )}
+            <button
+              onClick={() => onNavigate ? onNavigate('/cadastro') : (window.location.hash = '/cadastro')}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+            >
+              Criar meu Cardápio
+            </button>
+          </div>
         </div>
       </div>
     );

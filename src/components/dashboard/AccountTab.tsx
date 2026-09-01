@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { StorageService } from '../../services/storage';
+import { normalizeSlug } from '../../services/restaurantUrl';
 import { useToast } from '../common/Toast';
 import { Restaurant } from '../../types';
 
@@ -58,13 +59,20 @@ export const AccountTab: React.FC<AccountTabProps> = ({ onNavigate }) => {
     e.preventDefault();
     if (!currentUser || !newStoreName.trim()) return;
 
-    const newSlug = newStoreName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const baseSlug = normalizeSlug(newStoreName) || `loja-${Date.now()}`;
+    let uniqueSlug = baseSlug;
+    let counter = 1;
+    while (StorageService.getRestaurantBySlug(uniqueSlug)) {
+      uniqueSlug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+
     const newRestaurant: Restaurant = {
       id: `rest-${Date.now()}`,
       ownerId: currentUser.id,
       settings: {
         name: newStoreName.trim(),
-        slug: newSlug || `rest-${Date.now()}`,
+        slug: uniqueSlug,
         category: 'Hamburgueria',
         description: 'Bem-vindo ao nosso cardápio digital!',
         logoUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=200&h=200&q=80',

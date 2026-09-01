@@ -12,11 +12,13 @@ import {
   CheckCircle2, 
   ArrowUpRight,
   Sparkles,
-  QrCode
+  QrCode,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { StorageService } from '../../services/storage';
 import { formatCurrency } from '../../services/whatsapp';
+import { getRestaurantPublicUrl, getRestaurantWhatsAppShareUrl } from '../../services/restaurantUrl';
 import { useToast } from '../common/Toast';
 import { Order } from '../../types';
 
@@ -99,7 +101,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab, onOpenP
     showToast(newStatus ? '🟢 Estabelecimento aberto para pedidos!' : '🔴 Estabelecimento fechado para pedidos.');
   };
 
-  const menuUrl = `${window.location.origin}/#/r/${currentRestaurant?.settings.slug || 'restaurante'}`;
+  const menuUrl = getRestaurantPublicUrl(currentRestaurant);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(menuUrl);
@@ -107,15 +109,23 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab, onOpenP
   };
 
   const handleShare = () => {
+    if (!currentRestaurant) return;
+    const shareData = {
+      title: `${currentRestaurant.settings.name} — Cardápio Digital`,
+      text: `Confira nosso cardápio digital e faça seu pedido pelo WhatsApp:`,
+      url: menuUrl,
+    };
     if (navigator.share) {
-      navigator.share({
-        title: currentRestaurant?.settings.name || 'Cardápio Digital',
-        text: `Confira nosso cardápio digital e faça seu pedido pelo WhatsApp:`,
-        url: menuUrl,
-      }).catch(() => handleCopyLink());
+      navigator.share(shareData).catch(() => handleCopyLink());
     } else {
       handleCopyLink();
     }
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!currentRestaurant) return;
+    const shareUrl = getRestaurantWhatsAppShareUrl(currentRestaurant);
+    window.open(shareUrl, '_blank');
   };
 
   if (!currentRestaurant) return null;
@@ -170,19 +180,27 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab, onOpenP
 
       {/* Share / Link Card */}
       <div className="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
+        <div className="flex items-center gap-3.5 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0">
             <QrCode className="w-5 h-5" />
           </div>
-          <div>
-            <p className="text-xs font-semibold text-emerald-400">Link do seu cardápio público:</p>
-            <p className="text-sm font-mono text-white truncate max-w-xs sm:max-w-md mt-0.5">
-              menuzap.com/r/{currentRestaurant.settings.slug}
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-emerald-400">Link exclusivo do seu cardápio:</p>
+            <p className="text-xs sm:text-sm font-mono text-white truncate max-w-xs sm:max-w-md mt-0.5" title={menuUrl}>
+              {menuUrl}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={handleShareWhatsApp}
+            className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/50 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
+            title="Compartilhar no WhatsApp"
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+            <span>WhatsApp</span>
+          </button>
           <button
             onClick={handleCopyLink}
             className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer"
