@@ -1,0 +1,6 @@
+{
+  "name": "MenuZap - Cardápio Digital & Pedidos via WhatsApp",
+  "description": "Plataforma SaaS moderna para cardápios digitais personalizados e pedidos automáticos via WhatsApp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
