@@ -2,7 +2,7 @@ import { Restaurant, RestaurantSettings } from '../types';
 
 /**
  * Normalizes a raw string into a URL-friendly slug.
- * e.g. "BM Lanches" -> "bm-lanches", "Burger House!" -> "burger-house"
+ * e.g. "BM Lanches" -> "bm-lanches", "Pizza & Burger!" -> "pizza-burger"
  */
 export function normalizeSlug(rawSlug?: string | null): string {
   if (!rawSlug) return '';
@@ -13,6 +13,70 @@ export function normalizeSlug(rawSlug?: string | null): string {
     .replace(/[\u0300-\u036f]/g, '') // remove accent marks
     .replace(/[^a-z0-9]+/g, '-')     // replace non-alphanumeric with hyphen
     .replace(/(^-|-$)+/g, '');       // trim hyphens
+}
+
+/**
+ * Extracts and decodes the restaurant slug from any URL, hash, or pathname.
+ * Handles:
+ * - `#/r/bm-lanches` -> `bm-lanches`
+ * - `#/r/bm-lanches/` -> `bm-lanches`
+ * - `#/r/bm-lanches?mesa=10` -> `bm-lanches`
+ * - `https://example.com/#/r/minha-pizzaria?mesa=2` -> `minha-pizzaria`
+ * - `/r/sushi-house` -> `sushi-house`
+ * Returns decoded, normalized slug string or null if not a public restaurant menu route.
+ */
+export function getRestaurantSlugFromUrl(urlOrHash?: string): string | null {
+  const raw = urlOrHash !== undefined
+    ? urlOrHash
+    : (typeof window !== 'undefined' ? (window.location.hash || window.location.pathname) : '');
+
+  if (!raw) return null;
+
+  // Clean hash symbol if present
+  let cleanRoute = raw.replace(/^#/, '').trim();
+
+  // If a full URL was passed, parse it
+  if (cleanRoute.startsWith('http://') || cleanRoute.startsWith('https://')) {
+    try {
+      const parsed = new URL(cleanRoute);
+      if (parsed.hash) {
+        cleanRoute = parsed.hash.replace(/^#/, '').trim();
+      } else {
+        cleanRoute = parsed.pathname;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Strip query params (?mesa=1, etc.) and trailing slash
+  const routeWithoutQuery = cleanRoute.split('?')[0].replace(/\/+$/, '');
+
+  // Match /r/:slug
+  const match = routeWithoutQuery.match(/^\/r\/([^\/?#]+)/);
+  if (!match || !match[1]) return null;
+
+  const rawSlug = decodeURIComponent(match[1]);
+  return normalizeSlug(rawSlug) || null;
+}
+
+/**
+ * Extracts the table/mesa number from a URL, hash, or query string if present.
+ */
+export function getTableNumberFromUrl(urlOrHash?: string): string | undefined {
+  const raw = urlOrHash !== undefined
+    ? urlOrHash
+    : (typeof window !== 'undefined' ? `${window.location.hash}${window.location.search}` : '');
+
+  if (!raw) return undefined;
+
+  const questionIndex = raw.indexOf('?');
+  if (questionIndex === -1) return undefined;
+
+  const queryString = raw.slice(questionIndex + 1);
+  const params = new URLSearchParams(queryString);
+  const table = params.get('mesa') || params.get('table') || undefined;
+  return table ? decodeURIComponent(table).trim() : undefined;
 }
 
 /**
@@ -77,6 +141,27 @@ export function getRestaurantWhatsAppShareUrl(
 
   const text = `Confira o cardápio digital do *${name}* e faça seu pedido direto pelo WhatsApp:\n\n${url}`;
   return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+}
+
+/**
+ * Generates a unique, collision-free slug for a new restaurant.
+ */
+export function generateUniqueSlug(
+  name: string,
+  existingSlugs: string[]
+): string {
+  const baseSlug = normalizeSlug(name) || `loja-${Date.now().toString().slice(-4)}`;
+  const normalizedExisting = existingSlugs.map(s => normalizeSlug(s));
+
+  if (!normalizedExisting.includes(baseSlug)) {
+    return baseSlug;
+  }
+
+  let counter = 2;
+  while (normalizedExisting.includes(`${baseSlug}-${counter}`)) {
+    counter++;
+  }
+  return `${baseSlug}-${counter}`;
 }
 
 /**

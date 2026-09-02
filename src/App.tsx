@@ -8,35 +8,42 @@ import { RegisterPage } from './components/auth/RegisterPage';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { PublicMenu } from './components/menu/PublicMenu';
+import { getRestaurantSlugFromUrl, getTableNumberFromUrl } from './services/restaurantUrl';
 
 function AppContent() {
-  const { currentUser, currentRestaurant, isLoading } = useAuth();
+  const { currentUser, isLoading } = useAuth();
   
-  // Parse initial route from pathname or hash
+  // Parse initial route from hash or pathname
   const getInitialRoute = (): string => {
-    if (window.location.hash) {
-      return window.location.hash.replace(/^#/, '');
+    if (typeof window !== 'undefined') {
+      if (window.location.hash) {
+        return window.location.hash.replace(/^#/, '');
+      }
+      const path = window.location.pathname;
+      return path && path !== '/' ? path : '/';
     }
-    const path = window.location.pathname;
-    return path && path !== '/' ? path : '/';
+    return '/';
   };
 
   const [currentRoute, setCurrentRoute] = useState<string>(getInitialRoute());
 
-  // Listen to hash / popstate changes
+  // Listen to hash and popstate changes
   useEffect(() => {
-    const handleHashChange = () => {
+    const handleLocationChange = () => {
       const hash = window.location.hash.replace(/^#/, '');
       if (hash) {
         setCurrentRoute(hash);
+      } else {
+        const path = window.location.pathname;
+        setCurrentRoute(path && path !== '/' ? path : '/');
       }
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    window.addEventListener('popstate', handleHashChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-      window.removeEventListener('popstate', handleHashChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
     };
   }, []);
 
@@ -57,18 +64,19 @@ function AppContent() {
     );
   }
 
-  // Route matching:
-  // 1. /r/:slug (Public menu)
-  const menuMatch = currentRoute.match(/^\/r\/([^\/?#]+)/);
-  if (menuMatch) {
-    const slug = menuMatch[1];
-    // Extract query params for table / mesa if any
-    const urlParams = new URLSearchParams(window.location.search || (currentRoute.includes('?') ? currentRoute.split('?')[1] : ''));
-    const tableNumber = urlParams.get('mesa') || urlParams.get('table') || undefined;
+  // 1. /r/:slug (Public menu for any restaurant slug)
+  const publicSlug = getRestaurantSlugFromUrl(currentRoute);
+  if (publicSlug) {
+    const tableNumber = getTableNumberFromUrl(currentRoute) || getTableNumberFromUrl();
 
     return (
-      <CartProvider restaurantSlug={slug}>
-        <PublicMenu slug={slug} tableNumber={tableNumber} onNavigate={navigate} />
+      <CartProvider restaurantSlug={publicSlug}>
+        <PublicMenu 
+          key={publicSlug} 
+          slug={publicSlug} 
+          tableNumber={tableNumber} 
+          onNavigate={navigate} 
+        />
       </CartProvider>
     );
   }

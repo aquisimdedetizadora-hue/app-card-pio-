@@ -14,9 +14,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { StorageService } from '../../services/storage';
-import { normalizeSlug } from '../../services/restaurantUrl';
+import { generateUniqueSlug } from '../../services/restaurantUrl';
 import { useToast } from '../common/Toast';
-import { Restaurant } from '../../types';
+import { Restaurant, Category, Product } from '../../types';
 
 interface AccountTabProps {
   onNavigate: (route: string) => void;
@@ -59,16 +59,12 @@ export const AccountTab: React.FC<AccountTabProps> = ({ onNavigate }) => {
     e.preventDefault();
     if (!currentUser || !newStoreName.trim()) return;
 
-    const baseSlug = normalizeSlug(newStoreName) || `loja-${Date.now()}`;
-    let uniqueSlug = baseSlug;
-    let counter = 1;
-    while (StorageService.getRestaurantBySlug(uniqueSlug)) {
-      uniqueSlug = `${baseSlug}-${counter}`;
-      counter++;
-    }
+    const existingSlugs = StorageService.getRestaurants().map(r => r.settings?.slug || '');
+    const uniqueSlug = generateUniqueSlug(newStoreName, existingSlugs);
+    const newRestaurantId = `rest-${Date.now()}`;
 
     const newRestaurant: Restaurant = {
-      id: `rest-${Date.now()}`,
+      id: newRestaurantId,
       ownerId: currentUser.id,
       settings: {
         name: newStoreName.trim(),
@@ -135,6 +131,32 @@ export const AccountTab: React.FC<AccountTabProps> = ({ onNavigate }) => {
     };
 
     StorageService.saveRestaurant(newRestaurant);
+
+    // Initialize starter category and product for this store
+    const initialCat: Category = {
+      id: `cat-${newRestaurantId}-1`,
+      restaurantId: newRestaurantId,
+      name: 'Destaques',
+      description: 'Nossos produtos mais pedidos',
+      order: 1,
+      isActive: true,
+    };
+    StorageService.saveCategory(initialCat);
+
+    const initialProd: Product = {
+      id: `prod-${newRestaurantId}-1`,
+      restaurantId: newRestaurantId,
+      categoryId: initialCat.id,
+      name: `${newStoreName.trim()} Especial`,
+      description: 'Preparado artesanalmente com ingredientes de primeira qualidade.',
+      price: 28.90,
+      imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80',
+      isAvailable: true,
+      isFeatured: true,
+      order: 1,
+    };
+    StorageService.saveProduct(initialProd);
+
     switchRestaurant(newRestaurant.id);
     setIsNewStoreModalOpen(false);
     showToast(`🏪 Estabelecimento "${newRestaurant.settings.name}" criado com sucesso!`);

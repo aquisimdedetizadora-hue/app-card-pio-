@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { User, Restaurant } from '../types';
+import { User, Restaurant, Category, Product } from '../types';
 import { StorageService } from '../services/storage';
+import { generateUniqueSlug } from '../services/restaurantUrl';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -91,12 +92,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const newUserId = `user-${Date.now()}`;
     const newRestaurantId = `rest-${Date.now()}`;
-    const slug = restaurantName
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '') || `rest-${Date.now().toString().slice(-4)}`;
+    const existingSlugs = StorageService.getRestaurants().map(r => r.settings?.slug || '');
+    const slug = generateUniqueSlug(restaurantName, existingSlugs);
 
     const newRestaurant: Restaurant = {
       id: newRestaurantId,
@@ -177,6 +174,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     StorageService.saveRestaurant(newRestaurant);
+
+    // Initialize initial default category and initial product for this new restaurant
+    const initialCat: Category = {
+      id: `cat-${newRestaurantId}-1`,
+      restaurantId: newRestaurantId,
+      name: 'Destaques',
+      description: 'Nossos produtos mais pedidos',
+      order: 1,
+      isActive: true,
+    };
+    StorageService.saveCategory(initialCat);
+
+    const initialProd: Product = {
+      id: `prod-${newRestaurantId}-1`,
+      restaurantId: newRestaurantId,
+      categoryId: initialCat.id,
+      name: `${restaurantName} Especial`,
+      description: 'Preparado artesanalmente com ingredientes selecionados e muito carinho.',
+      price: 28.90,
+      imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80',
+      isAvailable: true,
+      isFeatured: true,
+      order: 1,
+    };
+    StorageService.saveProduct(initialProd);
+
     StorageService.saveUser(newUser);
     StorageService.setCurrentUserId(newUserId);
 
