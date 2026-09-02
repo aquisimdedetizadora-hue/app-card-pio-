@@ -1,6 +1,7 @@
 import { Restaurant, Category, Product, AddonGroup, Order, User } from '../types';
 import { initialRestaurant, initialCategories, initialProducts, initialAddonGroups, initialOrders } from '../data/initialData';
 import { normalizeSlug } from './restaurantUrl';
+import { getSupabase, mapRowToRestaurant } from '../lib/supabase';
 
 const STORAGE_KEYS = {
   USERS: 'menuzap_users_v1',
@@ -34,23 +35,27 @@ function getFromStorage<T>(key: string, defaultValue: T): T {
 function setToStorage<T>(key: string, value: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-    // Trigger custom event for reactive tab updates
     window.dispatchEvent(new Event('menuzap_storage_update'));
   } catch (e) {
     console.error(`Error writing ${key} to storage:`, e);
   }
 }
 
-// Helper to safely send background API calls to server without breaking UI if offline
+// Background API helper
 async function apiCall(endpoint: string, options?: RequestInit): Promise<any> {
   try {
     const res = await fetch(endpoint, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         ...(options?.headers || {}),
       },
     });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return null;
+    }
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -71,12 +76,10 @@ export async function initializeStorage() {
     setToStorage(STORAGE_KEYS.CURRENT_USER_ID, defaultUser.id);
   }
 
-  // Bidirectional background sync with server
+  // Background sync with API
   try {
-    // 1. Fetch server state
     const serverDb = await apiCall('/api/sync');
     if (serverDb && serverDb.restaurants && serverDb.restaurants.length > 0) {
-      // Merge server restaurants into local storage
       const localRestaurants = getFromStorage<Restaurant[]>(STORAGE_KEYS.RESTAURANTS, []);
       const mergedRestaurants = [...localRestaurants];
 
@@ -89,69 +92,12 @@ export async function initializeStorage() {
         }
       }
       setToStorage(STORAGE_KEYS.RESTAURANTS, mergedRestaurants);
-
-      // Merge categories
-      if (serverDb.categories) {
-        const localCats = getFromStorage<Category[]>(STORAGE_KEYS.CATEGORIES, []);
-        const mergedCats = [...localCats];
-        for (const cat of serverDb.categories) {
-          const idx = mergedCats.findIndex(c => c.id === cat.id);
-          if (idx >= 0) mergedCats[idx] = cat;
-          else mergedCats.push(cat);
-        }
-        setToStorage(STORAGE_KEYS.CATEGORIES, mergedCats);
-      }
-
-      // Merge products
-      if (serverDb.products) {
-        const localProds = getFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-        const mergedProds = [...localProds];
-        for (const prod of serverDb.products) {
-          const idx = mergedProds.findIndex(p => p.id === prod.id);
-          if (idx >= 0) mergedProds[idx] = prod;
-          else mergedProds.push(prod);
-        }
-        setToStorage(STORAGE_KEYS.PRODUCTS, mergedProds);
-      }
-
-      // Merge addons
-      if (serverDb.addonGroups) {
-        const localAddons = getFromStorage<AddonGroup[]>(STORAGE_KEYS.ADDON_GROUPS, []);
-        const mergedAddons = [...localAddons];
-        for (const addon of serverDb.addonGroups) {
-          const idx = mergedAddons.findIndex(a => a.id === addon.id);
-          if (idx >= 0) mergedAddons[idx] = addon;
-          else mergedAddons.push(addon);
-        }
-        setToStorage(STORAGE_KEYS.ADDON_GROUPS, mergedAddons);
-      }
     }
-
-    // 2. Sync local restaurants to server
-    const currentLocalRestaurants = getFromStorage<Restaurant[]>(STORAGE_KEYS.RESTAURANTS, []);
-    const currentLocalCats = getFromStorage<Category[]>(STORAGE_KEYS.CATEGORIES, []);
-    const currentLocalProds = getFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-    const currentLocalAddons = getFromStorage<AddonGroup[]>(STORAGE_KEYS.ADDON_GROUPS, []);
-    const currentLocalOrders = getFromStorage<Order[]>(STORAGE_KEYS.ORDERS, []);
-    const currentLocalUsers = getFromStorage<User[]>(STORAGE_KEYS.USERS, []);
-
-    apiCall('/api/sync', {
-      method: 'POST',
-      body: JSON.stringify({
-        restaurants: currentLocalRestaurants,
-        categories: currentLocalCats,
-        products: currentLocalProds,
-        addonGroups: currentLocalAddons,
-        orders: currentLocalOrders,
-        users: currentLocalUsers,
-      }),
-    });
   } catch (e) {
     console.error('Storage sync error:', e);
   }
 }
 
-// Ensure storage is initialized
 initializeStorage();
 
 export const StorageService = {
@@ -197,36 +143,46 @@ export const StorageService = {
   },
   async getRestaurantBySlugAsync(slug: string): Promise<Restaurant | undefined> {
     if (!slug) return undefined;
-    const cleanSlug = normalizeSlug(slug);
-    if (!cleanSlug) return undefined;
+    const clean = normalizeSlug(slug);
+    if (!clean) return undefined;
 
-    // 1. First check server endpoint
+    // 1. Direct Supabase query if available
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('restaurants')
+          .select('*')
+          .or(`slug.eq.${clean},id.eq.${clean}`)
+          .maybeSingle();
+        if (data && !error) {
+          const rest = mapRowToRestaurant(data);
+          this.saveRestaurant(rest);
+          return rest;
+        }
+      } catch {}
+    }
+
+    // 2. Fetch serverless API
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(`/api/restaurants/by-slug/${encodeURIComponent(cleanSlug)}`, {
-        signal: controller.signal,
+      const res = await fetch(`/api/restaurants/by-slug/${encodeURIComponent(clean)}`, {
+        headers: { 'Accept': 'application/json' }
       });
-      clearTimeout(timeoutId);
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const rest: Restaurant = await res.json();
         if (rest && rest.id) {
-          // Cache locally
           this.saveRestaurant(rest);
           return rest;
         }
       }
-    } catch {
-      // Fall through to local cache
-    }
+    } catch {}
 
-    // 2. Fallback to local storage
-    return this.getRestaurantBySlug(cleanSlug);
+    return this.getRestaurantBySlug(clean);
   },
 
   /**
-   * Primary public menu data resolution method.
-   * Resolves restaurant, categories, products and addons for ANY visitor on ANY device.
+   * Primary public menu data resolution method for any anonymous visitor.
    */
   async getPublicRestaurantData(slug: string): Promise<{
     status: 'found' | 'not_found' | 'error';
@@ -240,48 +196,101 @@ export const StorageService = {
       return { status: 'not_found', categories: [], products: [], addonGroups: [] };
     }
 
+    // 1. Direct Supabase Query (Fastest on Client if credentials present)
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data: restRow, error } = await supabase
+          .from('restaurants')
+          .select('*')
+          .or(`slug.eq.${cleanSlug},id.eq.${cleanSlug}`)
+          .maybeSingle();
+
+        if (restRow && !error) {
+          const rest = mapRowToRestaurant(restRow);
+          const restId = rest.id;
+
+          const [catsRes, prodsRes, addonsRes] = await Promise.all([
+            supabase.from('categories').select('*').eq('restaurant_id', restId).eq('is_active', true).order('display_order'),
+            supabase.from('products').select('*').eq('restaurant_id', restId).eq('is_available', true).order('display_order'),
+            supabase.from('addon_groups').select('*').eq('restaurant_id', restId)
+          ]);
+
+          const categories: Category[] = (catsRes.data || []).map((c: any) => ({
+            id: c.id,
+            restaurantId: c.restaurant_id,
+            name: c.name,
+            description: c.description,
+            imageUrl: c.image_url,
+            order: c.display_order ?? 0,
+            isActive: c.is_active ?? true
+          }));
+
+          const products: Product[] = (prodsRes.data || []).map((p: any) => ({
+            id: p.id,
+            restaurantId: p.restaurant_id,
+            categoryId: p.category_id,
+            name: p.name,
+            description: p.description,
+            price: Number(p.price) || 0,
+            promotionalPrice: p.promotional_price ? Number(p.promotional_price) : undefined,
+            imageUrl: p.image_url || '',
+            isAvailable: p.is_available ?? true,
+            isFeatured: p.is_featured ?? false,
+            internalCode: p.internal_code,
+            order: p.display_order ?? 0,
+            variants: p.variants || [],
+            addonGroupIds: p.addon_group_ids || []
+          }));
+
+          const addonGroups: AddonGroup[] = (addonsRes.data || []).map((a: any) => ({
+            id: a.id,
+            restaurantId: a.restaurant_id,
+            name: a.name,
+            description: a.description,
+            isRequired: a.is_required ?? false,
+            minQuantity: a.min_quantity ?? 0,
+            maxQuantity: a.max_quantity ?? 1,
+            options: a.options || []
+          }));
+
+          // Cache locally
+          this.saveRestaurant(rest);
+
+          return {
+            status: 'found',
+            restaurant: rest,
+            categories,
+            products,
+            addonGroups
+          };
+        }
+      } catch (err) {
+        console.warn('Direct Supabase fetch error, trying API endpoint:', err);
+      }
+    }
+
+    // 2. Fetch Serverless API Endpoint (/api/restaurants/data-by-slug/:slug)
     try {
-      // 1. Request public data bundle directly from server API
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(`/api/restaurants/data-by-slug/${encodeURIComponent(cleanSlug)}`, {
         signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
       });
       clearTimeout(timeoutId);
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.status === 'found' && data.restaurant) {
-          // Update local cache seamlessly
-          this.saveRestaurant(data.restaurant);
-          if (Array.isArray(data.categories)) {
-            const allCats = getFromStorage<Category[]>(STORAGE_KEYS.CATEGORIES, []);
-            for (const c of data.categories) {
-              const idx = allCats.findIndex(x => x.id === c.id);
-              if (idx >= 0) allCats[idx] = c;
-              else allCats.push(c);
-            }
-            setToStorage(STORAGE_KEYS.CATEGORIES, allCats);
-          }
-          if (Array.isArray(data.products)) {
-            const allProds = getFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-            for (const p of data.products) {
-              const idx = allProds.findIndex(x => x.id === p.id);
-              if (idx >= 0) allProds[idx] = p;
-              else allProds.push(p);
-            }
-            setToStorage(STORAGE_KEYS.PRODUCTS, allProds);
-          }
-          if (Array.isArray(data.addonGroups)) {
-            const allAddons = getFromStorage<AddonGroup[]>(STORAGE_KEYS.ADDON_GROUPS, []);
-            for (const a of data.addonGroups) {
-              const idx = allAddons.findIndex(x => x.id === a.id);
-              if (idx >= 0) allAddons[idx] = a;
-              else allAddons.push(a);
-            }
-            setToStorage(STORAGE_KEYS.ADDON_GROUPS, allAddons);
-          }
+      const contentType = res.headers.get('content-type') || '';
 
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+
+        if (res.status === 404 || data.status === 'not_found') {
+          return { status: 'not_found', categories: [], products: [], addonGroups: [] };
+        }
+
+        if (res.ok && data.status === 'found' && data.restaurant) {
+          this.saveRestaurant(data.restaurant);
           return {
             status: 'found',
             restaurant: data.restaurant,
@@ -291,30 +300,11 @@ export const StorageService = {
           };
         }
       }
-
-      if (res.status === 404) {
-        // Double check local storage just in case it was created locally seconds ago
-        const localRest = this.getRestaurantBySlug(cleanSlug);
-        if (localRest) {
-          const categories = this.getCategories(localRest.id).filter(c => c.isActive);
-          const products = this.getProducts(localRest.id);
-          const addonGroups = this.getAddonGroups(localRest.id);
-          return {
-            status: 'found',
-            restaurant: localRest,
-            categories,
-            products,
-            addonGroups,
-          };
-        }
-
-        return { status: 'not_found', categories: [], products: [], addonGroups: [] };
-      }
     } catch (e) {
-      console.warn('Network error fetching from server, attempting local storage fallback:', e);
+      console.warn('Error fetching public restaurant data from API:', e);
     }
 
-    // 2. Fallback to local storage (e.g. offline)
+    // 3. Fallback to local storage (for offline access or creator's local device)
     const localRest = this.getRestaurantBySlug(cleanSlug);
     if (localRest) {
       const categories = this.getCategories(localRest.id).filter(c => c.isActive);
@@ -334,6 +324,9 @@ export const StorageService = {
 
   saveRestaurant(restaurant: Restaurant): void {
     const restaurants = this.getRestaurants();
+    const cleanSlug = normalizeSlug(restaurant.settings?.slug || restaurant.settings?.name || restaurant.id);
+    restaurant.settings = { ...restaurant.settings, slug: cleanSlug };
+
     const index = restaurants.findIndex(r => r.id === restaurant.id);
     if (index >= 0) {
       restaurants[index] = restaurant;
@@ -342,167 +335,167 @@ export const StorageService = {
     }
     setToStorage(STORAGE_KEYS.RESTAURANTS, restaurants);
 
-    // Sync to server API in background
+    // Save to Serverless API & Supabase
     apiCall('/api/restaurants', {
       method: 'POST',
-      body: JSON.stringify(restaurant),
+      body: JSON.stringify(restaurant)
     });
   },
 
   // Categories
-  getCategories(restaurantId: string): Category[] {
+  getCategories(restaurantId?: string): Category[] {
     const all = getFromStorage<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
-    return all
-      .filter(c => c.restaurantId === restaurantId)
-      .sort((a, b) => a.order - b.order);
+    if (restaurantId) {
+      return all.filter(c => c.restaurantId === restaurantId).sort((a, b) => (a.order || 0) - (b.order || 0));
+    }
+    return all.sort((a, b) => (a.order || 0) - (b.order || 0));
   },
   saveCategory(category: Category): void {
-    const all = getFromStorage<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
-    const index = all.findIndex(c => c.id === category.id);
+    const categories = this.getCategories();
+    const index = categories.findIndex(c => c.id === category.id);
     if (index >= 0) {
-      all[index] = category;
+      categories[index] = category;
     } else {
-      all.push(category);
+      categories.push(category);
     }
-    setToStorage(STORAGE_KEYS.CATEGORIES, all);
+    setToStorage(STORAGE_KEYS.CATEGORIES, categories);
 
     apiCall('/api/categories', {
       method: 'POST',
-      body: JSON.stringify(category),
-    });
-  },
-  deleteCategory(categoryId: string): void {
-    const all = getFromStorage<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
-    setToStorage(STORAGE_KEYS.CATEGORIES, all.filter(c => c.id !== categoryId));
-
-    apiCall(`/api/categories/${categoryId}`, {
-      method: 'DELETE',
+      body: JSON.stringify(category)
     });
   },
   reorderCategories(restaurantId: string, orderedCategories: Category[]): void {
     const all = getFromStorage<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
-    const otherRestaurantsCats = all.filter(c => c.restaurantId !== restaurantId);
-    const updated = orderedCategories.map((cat, idx) => ({ ...cat, order: idx + 1 }));
-    setToStorage(STORAGE_KEYS.CATEGORIES, [...otherRestaurantsCats, ...updated]);
+    const otherCats = all.filter(c => c.restaurantId !== restaurantId);
+    const updated = orderedCategories.map((c, i) => ({ ...c, order: i }));
+    setToStorage(STORAGE_KEYS.CATEGORIES, [...otherCats, ...updated]);
 
     updated.forEach(cat => {
       apiCall('/api/categories', {
         method: 'POST',
-        body: JSON.stringify(cat),
+        body: JSON.stringify(cat)
       });
+    });
+  },
+  deleteCategory(categoryId: string): void {
+    const categories = this.getCategories().filter(c => c.id !== categoryId);
+    setToStorage(STORAGE_KEYS.CATEGORIES, categories);
+
+    apiCall(`/api/categories/${categoryId}`, {
+      method: 'DELETE'
     });
   },
 
   // Products
-  getProducts(restaurantId: string): Product[] {
+  getProducts(restaurantId?: string): Product[] {
     const all = getFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
-    return all
-      .filter(p => p.restaurantId === restaurantId)
-      .sort((a, b) => a.order - b.order);
-  },
-  getProductById(productId: string): Product | undefined {
-    const all = getFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
-    return all.find(p => p.id === productId);
+    if (restaurantId) {
+      return all.filter(p => p.restaurantId === restaurantId).sort((a, b) => (a.order || 0) - (b.order || 0));
+    }
+    return all.sort((a, b) => (a.order || 0) - (b.order || 0));
   },
   saveProduct(product: Product): void {
-    const all = getFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
-    const index = all.findIndex(p => p.id === product.id);
+    const products = this.getProducts();
+    const index = products.findIndex(p => p.id === product.id);
     if (index >= 0) {
-      all[index] = product;
+      products[index] = product;
     } else {
-      all.push(product);
+      products.push(product);
     }
-    setToStorage(STORAGE_KEYS.PRODUCTS, all);
+    setToStorage(STORAGE_KEYS.PRODUCTS, products);
 
     apiCall('/api/products', {
       method: 'POST',
-      body: JSON.stringify(product),
+      body: JSON.stringify(product)
     });
   },
   deleteProduct(productId: string): void {
-    const all = getFromStorage<Product[]>(STORAGE_KEYS.PRODUCTS, initialProducts);
-    setToStorage(STORAGE_KEYS.PRODUCTS, all.filter(p => p.id !== productId));
+    const products = this.getProducts().filter(p => p.id !== productId);
+    setToStorage(STORAGE_KEYS.PRODUCTS, products);
 
     apiCall(`/api/products/${productId}`, {
-      method: 'DELETE',
+      method: 'DELETE'
     });
   },
 
   // Addon Groups
-  getAddonGroups(restaurantId: string): AddonGroup[] {
+  getAddonGroups(restaurantId?: string): AddonGroup[] {
     const all = getFromStorage<AddonGroup[]>(STORAGE_KEYS.ADDON_GROUPS, initialAddonGroups);
-    return all.filter(ag => ag.restaurantId === restaurantId);
+    if (restaurantId) {
+      return all.filter(a => a.restaurantId === restaurantId);
+    }
+    return all;
   },
   saveAddonGroup(group: AddonGroup): void {
-    const all = getFromStorage<AddonGroup[]>(STORAGE_KEYS.ADDON_GROUPS, initialAddonGroups);
-    const index = all.findIndex(g => g.id === group.id);
+    const groups = this.getAddonGroups();
+    const index = groups.findIndex(g => g.id === group.id);
     if (index >= 0) {
-      all[index] = group;
+      groups[index] = group;
     } else {
-      all.push(group);
+      groups.push(group);
     }
-    setToStorage(STORAGE_KEYS.ADDON_GROUPS, all);
+    setToStorage(STORAGE_KEYS.ADDON_GROUPS, groups);
 
     apiCall('/api/addon-groups', {
       method: 'POST',
-      body: JSON.stringify(group),
+      body: JSON.stringify(group)
     });
   },
   deleteAddonGroup(groupId: string): void {
-    const all = getFromStorage<AddonGroup[]>(STORAGE_KEYS.ADDON_GROUPS, initialAddonGroups);
-    setToStorage(STORAGE_KEYS.ADDON_GROUPS, all.filter(g => g.id !== groupId));
+    const groups = this.getAddonGroups().filter(g => g.id !== groupId);
+    setToStorage(STORAGE_KEYS.ADDON_GROUPS, groups);
 
     apiCall(`/api/addon-groups/${groupId}`, {
-      method: 'DELETE',
+      method: 'DELETE'
     });
   },
 
   // Orders
-  getOrders(restaurantId: string): Order[] {
+  getOrders(restaurantId?: string): Order[] {
     const all = getFromStorage<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
-    return all
-      .filter(o => o.restaurantId === restaurantId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (restaurantId) {
+      return all
+        .filter(o => o.restaurantId === restaurantId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
   saveOrder(order: Order): void {
-    const all = getFromStorage<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
-    const index = all.findIndex(o => o.id === order.id);
+    const orders = this.getOrders();
+    const index = orders.findIndex(o => o.id === order.id);
     if (index >= 0) {
-      all[index] = order;
+      orders[index] = order;
     } else {
-      all.unshift(order);
+      orders.unshift(order);
     }
-    setToStorage(STORAGE_KEYS.ORDERS, all);
+    setToStorage(STORAGE_KEYS.ORDERS, orders);
 
     apiCall('/api/orders', {
       method: 'POST',
-      body: JSON.stringify(order),
+      body: JSON.stringify(order)
     });
   },
   updateOrderStatus(orderId: string, status: Order['status']): void {
-    const all = getFromStorage<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
-    const order = all.find(o => o.id === orderId);
+    const orders = this.getOrders();
+    const order = orders.find(o => o.id === orderId);
     if (order) {
       order.status = status;
-      setToStorage(STORAGE_KEYS.ORDERS, all);
+      setToStorage(STORAGE_KEYS.ORDERS, orders);
 
       apiCall(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status })
       });
     }
   },
-
-  // Reset to default demo data
   resetDemoData(): void {
-    localStorage.removeItem(STORAGE_KEYS.USERS);
-    localStorage.removeItem(STORAGE_KEYS.RESTAURANTS);
-    localStorage.removeItem(STORAGE_KEYS.CATEGORIES);
-    localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
-    localStorage.removeItem(STORAGE_KEYS.ADDON_GROUPS);
-    localStorage.removeItem(STORAGE_KEYS.ORDERS);
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
-    initializeStorage();
-    window.dispatchEvent(new Event('menuzap_storage_update'));
+    setToStorage(STORAGE_KEYS.USERS, [defaultUser]);
+    setToStorage(STORAGE_KEYS.RESTAURANTS, [initialRestaurant]);
+    setToStorage(STORAGE_KEYS.CATEGORIES, initialCategories);
+    setToStorage(STORAGE_KEYS.PRODUCTS, initialProducts);
+    setToStorage(STORAGE_KEYS.ADDON_GROUPS, initialAddonGroups);
+    setToStorage(STORAGE_KEYS.ORDERS, initialOrders);
+    setToStorage(STORAGE_KEYS.CURRENT_USER_ID, defaultUser.id);
   }
 };
