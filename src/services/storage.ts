@@ -91,10 +91,51 @@ export const StorageService = {
     if (!slug) return undefined;
     const cleanSlug = normalizeSlug(slug);
     if (!cleanSlug) return undefined;
-    return this.getRestaurants().find(r => {
+    const all = this.getRestaurants();
+    return all.find(r => {
       const rSlug = normalizeSlug(r.settings?.slug);
-      return rSlug === cleanSlug;
+      const directSlug = normalizeSlug((r as any).slug);
+      const nameSlug = normalizeSlug(r.settings?.name);
+      return rSlug === cleanSlug || directSlug === cleanSlug || nameSlug === cleanSlug;
     });
+  },
+  async getRestaurantBySlugAsync(slug: string): Promise<Restaurant | undefined> {
+    await new Promise(resolve => setTimeout(resolve, 30));
+    return this.getRestaurantBySlug(slug);
+  },
+  async getPublicRestaurantData(slug: string): Promise<{
+    status: 'found' | 'not_found' | 'error';
+    restaurant?: Restaurant;
+    categories: Category[];
+    products: Product[];
+    addonGroups: AddonGroup[];
+  }> {
+    try {
+      const cleanSlug = normalizeSlug(slug);
+      if (!cleanSlug) {
+        return { status: 'not_found', categories: [], products: [], addonGroups: [] };
+      }
+
+      const rest = await this.getRestaurantBySlugAsync(cleanSlug);
+      if (!rest) {
+        return { status: 'not_found', categories: [], products: [], addonGroups: [] };
+      }
+
+      const categories = this.getCategories(rest.id).filter(c => c.isActive);
+      const products = this.getProducts(rest.id);
+      const addonGroups = this.getAddonGroups(rest.id);
+
+      return {
+        status: 'found',
+        restaurant: rest,
+        categories,
+        products,
+        addonGroups,
+      };
+    } catch (e) {
+      console.error('Error fetching public restaurant data for slug:', slug, e);
+      return { status: 'error', categories: [], products: [], addonGroups: [] };
+    }
   },
   saveRestaurant(restaurant: Restaurant): void {
     const restaurants = this.getRestaurants();

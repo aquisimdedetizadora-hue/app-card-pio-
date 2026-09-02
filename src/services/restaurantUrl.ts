@@ -16,49 +16,61 @@ export function normalizeSlug(rawSlug?: string | null): string {
 }
 
 /**
- * Extracts and decodes the restaurant slug from any URL, hash, or pathname.
- * Handles:
- * - `#/r/bm-lanches` -> `bm-lanches`
- * - `#/r/bm-lanches/` -> `bm-lanches`
- * - `#/r/bm-lanches?mesa=10` -> `bm-lanches`
- * - `https://example.com/#/r/minha-pizzaria?mesa=2` -> `minha-pizzaria`
- * - `/r/sushi-house` -> `sushi-house`
- * Returns decoded, normalized slug string or null if not a public restaurant menu route.
+ * Single source of truth for extracting the restaurant slug from Hash routing or Pathname.
+ * Interprets:
+ * - `#/r/:slug` (e.g. `#/r/bm-lanches`)
+ * - `#/r/:slug/`
+ * - `#/r/:slug?mesa=10`
+ * - `/r/:slug`
+ * - `https://domain.com/#/r/:slug`
+ * 
+ * Returns normalized slug string or null if not a restaurant menu route.
  */
-export function getRestaurantSlugFromUrl(urlOrHash?: string): string | null {
-  const raw = urlOrHash !== undefined
-    ? urlOrHash
-    : (typeof window !== 'undefined' ? (window.location.hash || window.location.pathname) : '');
-
-  if (!raw) return null;
-
-  // Clean hash symbol if present
-  let cleanRoute = raw.replace(/^#/, '').trim();
-
-  // If a full URL was passed, parse it
-  if (cleanRoute.startsWith('http://') || cleanRoute.startsWith('https://')) {
-    try {
-      const parsed = new URL(cleanRoute);
-      if (parsed.hash) {
-        cleanRoute = parsed.hash.replace(/^#/, '').trim();
-      } else {
-        cleanRoute = parsed.pathname;
+export function getPublicRestaurantSlug(urlOrHash?: string): string | null {
+  if (urlOrHash !== undefined) {
+    let raw = urlOrHash.trim();
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      try {
+        const parsed = new URL(raw);
+        raw = parsed.hash || parsed.pathname || '';
+      } catch {
+        // keep raw
       }
-    } catch {
-      // ignore
+    }
+
+    const clean = raw.replace(/^#/, '').trim();
+    const cleanWithoutQuery = clean.split('?')[0].replace(/\/+$/, '');
+    const match = cleanWithoutQuery.match(/^\/?r\/([^/?#]+)/i);
+    if (!match || !match[1]) return null;
+    return normalizeSlug(decodeURIComponent(match[1])) || null;
+  }
+
+  // Browser window context
+  if (typeof window === 'undefined') return null;
+
+  const hash = window.location.hash || '';
+  if (hash) {
+    const match = hash.match(/^#\/r\/([^/?#]+)/i);
+    if (match && match[1]) {
+      return normalizeSlug(decodeURIComponent(match[1])) || null;
     }
   }
 
-  // Strip query params (?mesa=1, etc.) and trailing slash
-  const routeWithoutQuery = cleanRoute.split('?')[0].replace(/\/+$/, '');
+  const pathname = window.location.pathname || '';
+  if (pathname && pathname !== '/') {
+    const match = pathname.match(/^\/?r\/([^/?#]+)/i);
+    if (match && match[1]) {
+      return normalizeSlug(decodeURIComponent(match[1])) || null;
+    }
+  }
 
-  // Match /r/:slug
-  const match = routeWithoutQuery.match(/^\/r\/([^\/?#]+)/);
-  if (!match || !match[1]) return null;
-
-  const rawSlug = decodeURIComponent(match[1]);
-  return normalizeSlug(rawSlug) || null;
+  return null;
 }
+
+/**
+ * Alias for getPublicRestaurantSlug for backward compatibility
+ */
+export const getRestaurantSlugFromUrl = getPublicRestaurantSlug;
 
 /**
  * Extracts the table/mesa number from a URL, hash, or query string if present.

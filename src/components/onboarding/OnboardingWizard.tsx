@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../common/Toast';
 import { RestaurantCategory, Restaurant, Category, Product } from '../../types';
 import { StorageService } from '../../services/storage';
+import { normalizeSlug } from '../../services/restaurantUrl';
 
 interface OnboardingWizardProps {
   onNavigate: (route: string) => void;
@@ -133,6 +134,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onNavigate }
       settings: {
         ...currentRestaurant.settings,
         name: name || currentRestaurant.settings.name,
+        slug: currentRestaurant.settings.slug || normalizeSlug(name) || 'cardapio',
         category: category,
         description: description || `O melhor de ${category.toLowerCase()} na sua região!`,
         whatsapp: whatsapp.replace(/\D/g, '') || currentRestaurant.settings.whatsapp,

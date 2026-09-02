@@ -33,15 +33,18 @@ interface PublicMenuProps {
   onNavigate?: (route: string) => void;
 }
 
+type MenuStatus = 'loading' | 'found' | 'not_found' | 'error';
+
 export const PublicMenu: React.FC<PublicMenuProps> = ({ slug, tableNumber, onNavigate }) => {
   const { addItem, totalCount, subtotal } = useCart();
   const { showToast } = useToast();
 
+  const [status, setStatus] = useState<MenuStatus>('loading');
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [addonGroups, setAddonGroups] = useState<AddonGroup[]>([]);
-  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   // State
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,31 +54,70 @@ export const PublicMenu: React.FC<PublicMenuProps> = ({ slug, tableNumber, onNav
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [showHoursModal, setShowHoursModal] = useState(false);
 
-  // Load data for this restaurant slug without any fallback to demo
-  useEffect(() => {
-    setIsLoaded(false);
+  const loadMenuData = async () => {
+    setStatus('loading');
+    setErrorMessage('');
+
     if (!slug) {
       setRestaurant(null);
       updateRestaurantMetaTags(null);
-      setIsLoaded(true);
+      setStatus('not_found');
       return;
     }
 
-    const rest = StorageService.getRestaurantBySlug(slug);
-    if (rest) {
-      setRestaurant(rest);
-      setCategories(StorageService.getCategories(rest.id).filter(c => c.isActive));
-      setProducts(StorageService.getProducts(rest.id));
-      setAddonGroups(StorageService.getAddonGroups(rest.id));
-      updateRestaurantMetaTags(rest, { tableNumber });
-    } else {
+    try {
+      const data = await StorageService.getPublicRestaurantData(slug);
+      
+      if (data.status === 'found' && data.restaurant) {
+        setRestaurant(data.restaurant);
+        setCategories(data.categories);
+        setProducts(data.products);
+        setAddonGroups(data.addonGroups);
+        updateRestaurantMetaTags(data.restaurant, { tableNumber });
+        setStatus('found');
+      } else if (data.status === 'not_found') {
+        setRestaurant(null);
+        setCategories([]);
+        setProducts([]);
+        setAddonGroups([]);
+        updateRestaurantMetaTags(null);
+        setStatus('not_found');
+      } else {
+        setRestaurant(null);
+        setCategories([]);
+        setProducts([]);
+        setAddonGroups([]);
+        updateRestaurantMetaTags(null);
+        setStatus('error');
+        setErrorMessage('Ocorreu um erro ao consultar os dados do cardápio.');
+      }
+    } catch (err: any) {
+      console.error('Error loading menu:', err);
       setRestaurant(null);
       setCategories([]);
       setProducts([]);
       setAddonGroups([]);
       updateRestaurantMetaTags(null);
+      setStatus('error');
+      setErrorMessage(err?.message || 'Falha ao carregar dados do restaurante.');
     }
-    setIsLoaded(true);
+  };
+
+  // Load data for this restaurant slug without any fallback to demo
+  useEffect(() => {
+    loadMenuData();
+
+    const handleStorageUpdate = () => {
+      loadMenuData();
+    };
+
+    window.addEventListener('storage', handleStorageUpdate);
+    window.addEventListener('menuzap_storage_update', handleStorageUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageUpdate);
+      window.removeEventListener('menuzap_storage_update', handleStorageUpdate);
+    };
   }, [slug, tableNumber]);
 
   const storeStatus = useMemo(() => {
@@ -138,18 +180,55 @@ export const PublicMenu: React.FC<PublicMenuProps> = ({ slug, tableNumber, onNav
     window.open(`https://api.whatsapp.com/send?phone=${cleanNum}&text=${msg}`, '_blank');
   };
 
-  if (!isLoaded) {
+  if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 font-sans">
         <div className="text-center space-y-3">
-          <div className="w-9 h-9 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-slate-400">Carregando cardápio...</p>
+          <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-400 font-medium">Carregando cardápio...</p>
         </div>
       </div>
     );
   }
 
-  if (!restaurant) {
+  if (status === 'error') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 font-sans">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-5 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+
+          <div>
+            <h1 className="text-xl font-bold font-display text-white">
+              Erro ao carregar cardápio
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-2 leading-relaxed">
+              {errorMessage || 'Não foi possível carregar os dados deste cardápio no momento.'}
+            </p>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+            <button
+              onClick={loadMenuData}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+            >
+              Tentar Novamente
+            </button>
+            <button
+              onClick={() => onNavigate ? onNavigate('/') : (window.location.hash = '/')}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Ir para a Página Inicial</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'not_found' || !restaurant) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 font-sans">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-5 shadow-2xl">

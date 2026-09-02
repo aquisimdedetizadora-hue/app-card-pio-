@@ -8,7 +8,7 @@ import { RegisterPage } from './components/auth/RegisterPage';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { PublicMenu } from './components/menu/PublicMenu';
-import { getRestaurantSlugFromUrl, getTableNumberFromUrl } from './services/restaurantUrl';
+import { getPublicRestaurantSlug, getTableNumberFromUrl } from './services/restaurantUrl';
 
 function AppContent() {
   const { currentUser, isLoading } = useAuth();
@@ -30,7 +30,7 @@ function AppContent() {
   // Listen to hash and popstate changes
   useEffect(() => {
     const handleLocationChange = () => {
-      const hash = window.location.hash.replace(/^#/, '');
+      const hash = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
       if (hash) {
         setCurrentRoute(hash);
       } else {
@@ -48,8 +48,9 @@ function AppContent() {
   }, []);
 
   const navigate = (route: string) => {
-    window.location.hash = route;
-    setCurrentRoute(route);
+    const cleanRoute = route.startsWith('/') ? route : `/${route}`;
+    window.location.hash = cleanRoute;
+    setCurrentRoute(cleanRoute);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -65,7 +66,7 @@ function AppContent() {
   }
 
   // 1. /r/:slug (Public menu for any restaurant slug)
-  const publicSlug = getRestaurantSlugFromUrl(currentRoute);
+  const publicSlug = getPublicRestaurantSlug(currentRoute) || getPublicRestaurantSlug();
   if (publicSlug) {
     const tableNumber = getTableNumberFromUrl(currentRoute) || getTableNumberFromUrl();
 
