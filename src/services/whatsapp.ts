@@ -96,6 +96,9 @@ export function buildWhatsAppOrderMessage(order: Order, restaurant: Restaurant):
       if (order.deliveryAddress.city) {
         lines.push(`Cidade: ${order.deliveryAddress.city} - ${order.deliveryAddress.state}`);
       }
+      if (order.deliveryAddress.zipCode) {
+        lines.push(`CEP: ${order.deliveryAddress.zipCode}`);
+      }
       if (order.deliveryAddress.referencePoint) {
         lines.push(`Ponto de Ref.: ${order.deliveryAddress.referencePoint}`);
       }

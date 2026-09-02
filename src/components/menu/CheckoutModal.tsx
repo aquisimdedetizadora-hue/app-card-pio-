@@ -24,6 +24,8 @@ import { Restaurant, OrderType, PaymentMethodType, Order, Address } from '../../
 import { StorageService } from '../../services/storage';
 import { buildWhatsAppOrderMessage, buildWhatsAppUrl, formatCurrency } from '../../services/whatsapp';
 import { useToast } from '../common/Toast';
+import { AddressLocationPicker } from './AddressLocationPicker';
+import { GeocodedAddress } from '../../services/locationService';
 
 interface CheckoutModalProps {
   restaurant: Restaurant;
@@ -60,8 +62,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [number, setNumber] = useState('');
   const [complement, setComplement] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState(restaurant.settings.address.city || '');
+  const [state, setState] = useState(restaurant.settings.address.state || '');
+  const [zipCode, setZipCode] = useState('');
   const [referencePoint, setReferencePoint] = useState('');
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [tableNumber, setTableNumber] = useState(defaultTableNumber || '');
+
+  const handleAddressFound = (geo: GeocodedAddress) => {
+    if (geo.street) setStreet(geo.street);
+    if (geo.number) setNumber(geo.number);
+    if (geo.neighborhood) setNeighborhood(geo.neighborhood);
+    if (geo.city) setCity(geo.city);
+    if (geo.state) setState(geo.state);
+    if (geo.zipCode) setZipCode(geo.zipCode);
+    if (geo.latitude) setLatitude(geo.latitude);
+    if (geo.longitude) setLongitude(geo.longitude);
+
+    showToast('📍 Endereço preenchido! Confira o número e dados antes de enviar.');
+  };
 
   // Step 3: Payment
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('pix');
@@ -112,9 +132,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       number: number.trim(),
       complement: complement.trim() || undefined,
       neighborhood: neighborhood.trim(),
-      city: restaurant.settings.address.city,
-      state: restaurant.settings.address.state,
+      city: city.trim() || restaurant.settings.address.city,
+      state: state.trim() || restaurant.settings.address.state,
+      zipCode: zipCode.trim() || undefined,
       referencePoint: referencePoint.trim() || undefined,
+      latitude,
+      longitude,
     } : undefined;
 
     const newOrder: Order = {
@@ -363,69 +386,120 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             {step === 2 && (
               <form onSubmit={handleStep2Submit} className="space-y-4">
                 {orderType === 'delivery' && (
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                      Endereço de Entrega
-                    </h4>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-2">
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">Rua / Av *</label>
-                        <input
-                          type="text"
-                          value={street}
-                          onChange={e => setStreet(e.target.value)}
-                          placeholder="Rua das Flores"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">Número *</label>
-                        <input
-                          type="text"
-                          value={number}
-                          onChange={e => setNumber(e.target.value)}
-                          placeholder="123"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white"
-                          required
-                        />
-                      </div>
+                  <div className="space-y-3.5">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Endereço de Entrega
+                      </h4>
+                      <span className="text-[11px] text-slate-400">Campos com * são obrigatórios</span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">Bairro *</label>
-                        <input
-                          type="text"
-                          value={neighborhood}
-                          onChange={e => setNeighborhood(e.target.value)}
-                          placeholder="Centro"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">Complemento</label>
-                        <input
-                          type="text"
-                          value={complement}
-                          onChange={e => setComplement(e.target.value)}
-                          placeholder="Apto 42, Bloco C"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white"
-                        />
-                      </div>
-                    </div>
+                    {/* Geolocation Button & Auto-complete */}
+                    <AddressLocationPicker 
+                      onAddressFound={handleAddressFound}
+                      primaryColor={theme.primaryColor}
+                    />
 
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">Ponto de Referência</label>
-                      <input
-                        type="text"
-                        value={referencePoint}
-                        onChange={e => setReferencePoint(e.target.value)}
-                        placeholder="ex: Próximo à padaria central"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white"
-                      />
+                    <div className="pt-1">
+                      <div className="text-[11px] font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Dados do Endereço (todos editáveis)</span>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="col-span-2">
+                            <label className="block text-[11px] font-semibold text-slate-400 mb-1">Rua / Av *</label>
+                            <input
+                              type="text"
+                              value={street}
+                              onChange={e => setStreet(e.target.value)}
+                              placeholder="ex: Rua das Flores"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-400 mb-1">Número *</label>
+                            <input
+                              type="text"
+                              value={number}
+                              onChange={e => setNumber(e.target.value)}
+                              placeholder="123"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-400 mb-1">Bairro *</label>
+                            <input
+                              type="text"
+                              value={neighborhood}
+                              onChange={e => setNeighborhood(e.target.value)}
+                              placeholder="ex: Centro"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-400 mb-1">Complemento</label>
+                            <input
+                              type="text"
+                              value={complement}
+                              onChange={e => setComplement(e.target.value)}
+                              placeholder="Apto 42, Bloco C"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="col-span-2">
+                            <label className="block text-[11px] font-semibold text-slate-400 mb-1">Cidade / UF</label>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                value={city}
+                                onChange={e => setCity(e.target.value)}
+                                placeholder="Cidade"
+                                className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                              />
+                              <input
+                                type="text"
+                                value={state}
+                                onChange={e => setState(e.target.value.toUpperCase())}
+                                placeholder="UF"
+                                maxLength={2}
+                                className="w-14 px-2 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white text-center placeholder-slate-500 focus:outline-none focus:border-emerald-500 uppercase"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-400 mb-1">CEP</label>
+                            <input
+                              type="text"
+                              value={zipCode}
+                              onChange={e => setZipCode(e.target.value)}
+                              placeholder="00000-000"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">Ponto de Referência</label>
+                          <input
+                            type="text"
+                            value={referencePoint}
+                            onChange={e => setReferencePoint(e.target.value)}
+                            placeholder="ex: Próximo à padaria central / portão branco"
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     <div className="p-3 rounded-xl bg-slate-950/60 border border-white/10 text-xs flex items-center justify-between">

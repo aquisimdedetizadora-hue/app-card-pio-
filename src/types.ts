@@ -40,6 +40,8 @@ export interface Address {
   zipCode?: string;
   complement?: string;
   referencePoint?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface DeliverySettings {

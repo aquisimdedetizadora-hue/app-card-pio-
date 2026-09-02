@@ -84,7 +84,7 @@ export const OrdersTab: React.FC = () => {
           <div><strong>Cliente:</strong> ${order.customer.name}</div>
           <div><strong>Telefone:</strong> ${order.customer.phone}</div>
           <div><strong>Tipo:</strong> ${order.orderType.toUpperCase()}</div>
-          ${order.deliveryAddress ? `<div><strong>Endereço:</strong> ${order.deliveryAddress.street}, ${order.deliveryAddress.number} - ${order.deliveryAddress.neighborhood}</div>` : ''}
+          ${order.deliveryAddress ? `<div><strong>Endereço:</strong> ${order.deliveryAddress.street}, ${order.deliveryAddress.number}${order.deliveryAddress.complement ? ` (${order.deliveryAddress.complement})` : ''} - ${order.deliveryAddress.neighborhood}${order.deliveryAddress.city ? `, ${order.deliveryAddress.city}/${order.deliveryAddress.state}` : ''}${order.deliveryAddress.zipCode ? ` (CEP: ${order.deliveryAddress.zipCode})` : ''}</div>` : ''}
           ${order.tableNumber ? `<div><strong>Mesa:</strong> ${order.tableNumber}</div>` : ''}
           <div class="line"></div>
           <div class="bold">ITENS:</div>
@@ -354,8 +354,25 @@ export const OrdersTab: React.FC = () => {
                     {selectedOrder.deliveryAddress.complement ? ` (${selectedOrder.deliveryAddress.complement})` : ''}
                     {' - '}{selectedOrder.deliveryAddress.neighborhood}
                   </p>
+                  {(selectedOrder.deliveryAddress.city || selectedOrder.deliveryAddress.zipCode) && (
+                    <p className="text-slate-400 text-[11px] mt-0.5">
+                      {selectedOrder.deliveryAddress.city ? `${selectedOrder.deliveryAddress.city}/${selectedOrder.deliveryAddress.state || ''}` : ''}
+                      {selectedOrder.deliveryAddress.zipCode ? ` • CEP: ${selectedOrder.deliveryAddress.zipCode}` : ''}
+                    </p>
+                  )}
                   {selectedOrder.deliveryAddress.referencePoint && (
                     <p className="text-slate-400 text-[11px] mt-0.5">Ref: {selectedOrder.deliveryAddress.referencePoint}</p>
+                  )}
+                  {selectedOrder.deliveryAddress.latitude && selectedOrder.deliveryAddress.longitude && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${selectedOrder.deliveryAddress.latitude},${selectedOrder.deliveryAddress.longitude}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:underline mt-1.5"
+                    >
+                      <MapPin className="w-3 h-3" />
+                      <span>Abrir localização no Google Maps</span>
+                    </a>
                   )}
                 </div>
               )}
