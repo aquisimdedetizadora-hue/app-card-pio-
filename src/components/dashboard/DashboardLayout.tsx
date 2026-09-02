@@ -53,7 +53,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate, ac
 
   const handleOpenPublicMenu = () => {
     if (currentRestaurant?.settings.slug) {
-      onNavigate(`/r/${currentRestaurant.settings.slug}`);
+      onNavigate(`/${currentRestaurant.settings.slug}`);
     }
   };
 

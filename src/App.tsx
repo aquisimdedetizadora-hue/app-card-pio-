@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './components/common/Toast';
@@ -8,48 +8,64 @@ import { RegisterPage } from './components/auth/RegisterPage';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { PublicMenu } from './components/menu/PublicMenu';
-import { getPublicRestaurantSlug, getTableNumberFromUrl } from './services/restaurantUrl';
+import { getPublicRestaurantSlug, getTableNumberFromUrl, RESERVED_ROUTES } from './services/restaurantUrl';
 
 function AppContent() {
   const { currentUser, isLoading } = useAuth();
   
-  // Parse initial route from hash or pathname
-  const getInitialRoute = (): string => {
-    if (typeof window !== 'undefined') {
-      if (window.location.hash) {
-        return window.location.hash.replace(/^#/, '');
+  // Extract initial path from pathname or hash
+  const getCurrentLocationPath = useCallback((): string => {
+    if (typeof window === 'undefined') return '/';
+    
+    // Check old hash for backward compatibility (e.g. #/r/bm-lanches)
+    if (window.location.hash) {
+      const hash = window.location.hash.replace(/^#\/?/, '');
+      if (hash.startsWith('r/')) {
+        const slug = hash.replace(/^r\//, '').split('?')[0];
+        if (slug) {
+          try {
+            window.history.replaceState(null, '', `/${slug}${window.location.search}`);
+          } catch {
+            // ignore
+          }
+          return `/${slug}`;
+        }
       }
-      const path = window.location.pathname;
-      return path && path !== '/' ? path : '/';
+      if (hash && !hash.startsWith('/')) {
+        return `/${hash}`;
+      }
+      if (hash) {
+        return hash;
+      }
     }
-    return '/';
-  };
 
-  const [currentRoute, setCurrentRoute] = useState<string>(getInitialRoute());
+    const path = window.location.pathname;
+    return path && path !== '' ? path : '/';
+  }, []);
 
-  // Listen to hash and popstate changes
+  const [currentRoute, setCurrentRoute] = useState<string>(getCurrentLocationPath());
+
+  // Listen to popstate and hashchange changes (browser back/forward & direct links)
   useEffect(() => {
     const handleLocationChange = () => {
-      const hash = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
-      if (hash) {
-        setCurrentRoute(hash);
-      } else {
-        const path = window.location.pathname;
-        setCurrentRoute(path && path !== '/' ? path : '/');
-      }
+      setCurrentRoute(getCurrentLocationPath());
     };
 
-    window.addEventListener('hashchange', handleLocationChange);
     window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
     return () => {
-      window.removeEventListener('hashchange', handleLocationChange);
       window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
     };
-  }, []);
+  }, [getCurrentLocationPath]);
 
   const navigate = (route: string) => {
     const cleanRoute = route.startsWith('/') ? route : `/${route}`;
-    window.location.hash = cleanRoute;
+    try {
+      window.history.pushState(null, '', cleanRoute);
+    } catch {
+      // fallback
+    }
     setCurrentRoute(cleanRoute);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -65,9 +81,32 @@ function AppContent() {
     );
   }
 
-  // 1. /r/:slug (Public menu for any restaurant slug)
+  // 1. Reserved System Routes: Login
+  if (currentRoute === '/login') {
+    return <LoginPage onNavigate={navigate} />;
+  }
+
+  // 2. Reserved System Routes: Register
+  if (currentRoute === '/cadastro' || currentRoute === '/register') {
+    return <RegisterPage onNavigate={navigate} />;
+  }
+
+  // 3. Reserved System Routes: Onboarding
+  if (currentRoute === '/onboarding') {
+    return <OnboardingWizard onNavigate={navigate} />;
+  }
+
+  // 4. Reserved System Routes: Dashboard
+  if (currentRoute.startsWith('/dashboard')) {
+    if (!currentUser) {
+      return <LoginPage onNavigate={navigate} />;
+    }
+    return <DashboardLayout onNavigate={navigate} />;
+  }
+
+  // 5. Public Restaurant Menu (any non-reserved pathname like /bm-lanches, /pizza-do-joao)
   const publicSlug = getPublicRestaurantSlug(currentRoute) || getPublicRestaurantSlug();
-  if (publicSlug) {
+  if (publicSlug && !RESERVED_ROUTES.has(publicSlug)) {
     const tableNumber = getTableNumberFromUrl(currentRoute) || getTableNumberFromUrl();
 
     return (
@@ -82,30 +121,7 @@ function AppContent() {
     );
   }
 
-  // 2. /login
-  if (currentRoute === '/login') {
-    return <LoginPage onNavigate={navigate} />;
-  }
-
-  // 3. /cadastro or /register
-  if (currentRoute === '/cadastro' || currentRoute === '/register') {
-    return <RegisterPage onNavigate={navigate} />;
-  }
-
-  // 4. /onboarding
-  if (currentRoute === '/onboarding') {
-    return <OnboardingWizard onNavigate={navigate} />;
-  }
-
-  // 5. /dashboard
-  if (currentRoute.startsWith('/dashboard')) {
-    if (!currentUser) {
-      return <LoginPage onNavigate={navigate} />;
-    }
-    return <DashboardLayout onNavigate={navigate} />;
-  }
-
-  // Default: Landing Page
+  // 6. Default Landing Page for '/'
   return <LandingPage onNavigate={navigate} />;
 }
 

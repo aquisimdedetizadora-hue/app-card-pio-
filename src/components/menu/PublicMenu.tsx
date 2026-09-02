@@ -241,7 +241,7 @@ export const PublicMenu: React.FC<PublicMenuProps> = ({ slug, tableNumber, onNav
               Cardápio não encontrado
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-2 leading-relaxed">
-              O estabelecimento com o endereço <span className="text-emerald-400 font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800">/r/{slug}</span> não foi encontrado ou não está disponível.
+              O estabelecimento com o endereço <span className="text-emerald-400 font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800">/{slug}</span> não foi encontrado ou não está disponível.
             </p>
           </div>
 

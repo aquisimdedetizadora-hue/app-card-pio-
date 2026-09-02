@@ -1,6 +1,30 @@
 import { Restaurant, RestaurantSettings } from '../types';
 
 /**
+ * List of reserved system paths that should NEVER be treated as restaurant slugs.
+ */
+export const RESERVED_ROUTES = new Set([
+  '',
+  'login',
+  'cadastro',
+  'cadastrar',
+  'register',
+  'onboarding',
+  'dashboard',
+  'admin',
+  'demo',
+  'configuracoes',
+  'settings',
+  'conta',
+  'esqueci-minha-senha',
+  'forgot-password',
+  'api',
+  'favicon.ico',
+  'assets',
+  'index.html',
+]);
+
+/**
  * Normalizes a raw string into a URL-friendly slug.
  * e.g. "BM Lanches" -> "bm-lanches", "Pizza & Burger!" -> "pizza-burger"
  */
@@ -11,60 +35,136 @@ export function normalizeSlug(rawSlug?: string | null): string {
     .trim()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // remove accent marks
+    .replace(/^(\/|#|\/r\/|r\/)+/, '') // remove prefix slashes/hashes
     .replace(/[^a-z0-9]+/g, '-')     // replace non-alphanumeric with hyphen
     .replace(/(^-|-$)+/g, '');       // trim hyphens
 }
 
 /**
- * Single source of truth for extracting the restaurant slug from Hash routing or Pathname.
- * Interprets:
- * - `#/r/:slug` (e.g. `#/r/bm-lanches`)
- * - `#/r/:slug/`
- * - `#/r/:slug?mesa=10`
- * - `/r/:slug`
- * - `https://domain.com/#/r/:slug`
+ * Single source of truth for extracting the restaurant slug.
+ * Analyzes pathname (e.g. `/bm-lanches` -> `bm-lanches`) and handles backward compatibility migrations.
+ * 
+ * Works for:
+ * - `/bm-lanches` -> "bm-lanches"
+ * - `/pizza-do-joao?mesa=10` -> "pizza-do-joao"
+ * - `/sushi-premium/` -> "sushi-premium"
+ * - `#/r/bm-lanches` -> "bm-lanches" (migrates URL to `/bm-lanches`)
+ * - `/r/bm-lanches` -> "bm-lanches" (migrates URL to `/bm-lanches`)
  * 
  * Returns normalized slug string or null if not a restaurant menu route.
  */
-export function getPublicRestaurantSlug(urlOrHash?: string): string | null {
-  if (urlOrHash !== undefined) {
-    let raw = urlOrHash.trim();
+export function getPublicRestaurantSlug(urlOrPathname?: string): string | null {
+  // 1. Explicit input passed
+  if (urlOrPathname !== undefined && urlOrPathname !== null) {
+    let raw = urlOrPathname.trim();
     if (raw.startsWith('http://') || raw.startsWith('https://')) {
       try {
         const parsed = new URL(raw);
-        raw = parsed.hash || parsed.pathname || '';
+        raw = parsed.pathname || parsed.hash || '';
       } catch {
         // keep raw
       }
     }
 
-    const clean = raw.replace(/^#/, '').trim();
-    const cleanWithoutQuery = clean.split('?')[0].replace(/\/+$/, '');
-    const match = cleanWithoutQuery.match(/^\/?r\/([^/?#]+)/i);
-    if (!match || !match[1]) return null;
-    return normalizeSlug(decodeURIComponent(match[1])) || null;
+    // Check old hash pattern #/r/:slug
+    if (raw.includes('#/r/') || raw.startsWith('#/')) {
+      const hashPart = raw.split('#')[1] || '';
+      const cleanHash = hashPart.split('?')[0].replace(/^\/+/, '');
+      const hashSegments = cleanHash.split('/').filter(Boolean);
+      let hashSlug = '';
+      if (hashSegments[0] === 'r' && hashSegments[1]) {
+        hashSlug = hashSegments[1];
+      } else if (hashSegments[0] && !RESERVED_ROUTES.has(hashSegments[0].toLowerCase())) {
+        hashSlug = hashSegments[0];
+      }
+      if (hashSlug) {
+        const normalized = normalizeSlug(decodeURIComponent(hashSlug));
+        if (normalized && !RESERVED_ROUTES.has(normalized)) {
+          return normalized;
+        }
+      }
+    }
+
+    // Check pathname
+    const cleanPath = raw.split('?')[0].split('#')[0].replace(/^\/+|\/+$/g, '');
+    const segments = cleanPath.split('/').filter(Boolean);
+    if (segments.length === 0) return null;
+
+    let candidate = '';
+    if (segments[0] === 'r' && segments[1]) {
+      candidate = segments[1];
+    } else {
+      candidate = segments[0];
+    }
+
+    const normalized = normalizeSlug(decodeURIComponent(candidate));
+    if (!normalized || RESERVED_ROUTES.has(normalized)) {
+      return null;
+    }
+    return normalized;
   }
 
-  // Browser window context
+  // 2. Browser window context
   if (typeof window === 'undefined') return null;
 
+  // Check old hash for backward compatibility and migration
   const hash = window.location.hash || '';
   if (hash) {
-    const match = hash.match(/^#\/r\/([^/?#]+)/i);
-    if (match && match[1]) {
-      return normalizeSlug(decodeURIComponent(match[1])) || null;
+    const cleanHash = hash.replace(/^#\/?/, '').split('?')[0];
+    const hashSegments = cleanHash.split('/').filter(Boolean);
+    let hashSlug = '';
+    if (hashSegments[0] === 'r' && hashSegments[1]) {
+      hashSlug = hashSegments[1];
+    } else if (hashSegments[0] && !RESERVED_ROUTES.has(hashSegments[0].toLowerCase())) {
+      hashSlug = hashSegments[0];
+    }
+
+    if (hashSlug) {
+      const normalized = normalizeSlug(decodeURIComponent(hashSlug));
+      if (normalized && !RESERVED_ROUTES.has(normalized)) {
+        // Migrate URL seamlessly to clean path /:slug
+        try {
+          const search = window.location.search || (hash.includes('?') ? `?${hash.split('?')[1]}` : '');
+          window.history.replaceState(null, '', `/${normalized}${search}`);
+        } catch {
+          // ignore
+        }
+        return normalized;
+      }
     }
   }
 
+  // Check standard pathname
   const pathname = window.location.pathname || '';
-  if (pathname && pathname !== '/') {
-    const match = pathname.match(/^\/?r\/([^/?#]+)/i);
-    if (match && match[1]) {
-      return normalizeSlug(decodeURIComponent(match[1])) || null;
+  const cleanPath = pathname.split('?')[0].split('#')[0].replace(/^\/+|\/+$/g, '');
+  const segments = cleanPath.split('/').filter(Boolean);
+
+  if (segments.length === 0) return null;
+
+  let candidate = '';
+  if (segments[0] === 'r' && segments[1]) {
+    candidate = segments[1];
+    // Migrate /r/:slug to /:slug
+    try {
+      const normalized = normalizeSlug(decodeURIComponent(candidate));
+      if (normalized && !RESERVED_ROUTES.has(normalized)) {
+        const search = window.location.search;
+        window.history.replaceState(null, '', `/${normalized}${search}`);
+        return normalized;
+      }
+    } catch {
+      // ignore
     }
+  } else {
+    candidate = segments[0];
   }
 
-  return null;
+  const normalized = normalizeSlug(decodeURIComponent(candidate));
+  if (!normalized || RESERVED_ROUTES.has(normalized)) {
+    return null;
+  }
+
+  return normalized;
 }
 
 /**
@@ -73,29 +173,29 @@ export function getPublicRestaurantSlug(urlOrHash?: string): string | null {
 export const getRestaurantSlugFromUrl = getPublicRestaurantSlug;
 
 /**
- * Extracts the table/mesa number from a URL, hash, or query string if present.
+ * Extracts the table/mesa number from a URL, search query, or hash if present.
  */
-export function getTableNumberFromUrl(urlOrHash?: string): string | undefined {
-  const raw = urlOrHash !== undefined
-    ? urlOrHash
-    : (typeof window !== 'undefined' ? `${window.location.hash}${window.location.search}` : '');
+export function getTableNumberFromUrl(urlOrSearch?: string): string | undefined {
+  const raw = urlOrSearch !== undefined
+    ? urlOrSearch
+    : (typeof window !== 'undefined' ? `${window.location.search}&${window.location.hash}` : '');
 
   if (!raw) return undefined;
 
   const questionIndex = raw.indexOf('?');
-  if (questionIndex === -1) return undefined;
+  const searchPart = questionIndex !== -1 ? raw.slice(questionIndex + 1) : raw;
 
-  const queryString = raw.slice(questionIndex + 1);
-  const params = new URLSearchParams(queryString);
+  const params = new URLSearchParams(searchPart);
   const table = params.get('mesa') || params.get('table') || undefined;
   return table ? decodeURIComponent(table).trim() : undefined;
 }
 
 /**
- * Generates the definitive public URL for a given restaurant or slug.
- * Format: `${origin}/#/r/${slug}` (with optional `?mesa=${tableNumber}`)
+ * Generates the definitive clean public URL for a given restaurant or slug.
+ * Format: `${origin}/${slug}` (with optional `?mesa=${tableNumber}`)
  * 
- * NEVER returns a demo fallback when an entity is supplied.
+ * Example: `https://app-card-pio.vercel.app/bm-lanches`
+ * NEVER includes `#/r/`.
  */
 export function getRestaurantPublicUrl(
   restaurantOrSlug?: Restaurant | RestaurantSettings | string | null,
@@ -118,10 +218,10 @@ export function getRestaurantPublicUrl(
     : '';
 
   if (!slug) {
-    return origin ? `${origin}/#/` : '/#/';
+    return origin ? `${origin}/` : '/';
   }
 
-  let url = `${origin}/#/r/${slug}`;
+  let url = origin ? `${origin}/${slug}` : `/${slug}`;
 
   if (options?.tableNumber) {
     const tableStr = String(options.tableNumber).trim();
@@ -151,7 +251,7 @@ export function getRestaurantWhatsAppShareUrl(
     }
   }
 
-  const text = `Confira o cardápio digital do *${name}* e faça seu pedido direto pelo WhatsApp:\n\n${url}`;
+  const text = `Confira o cardápio digital de *${name}* e faça seu pedido direto pelo WhatsApp:\n\n${url}`;
   return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
 }
 
@@ -162,7 +262,10 @@ export function generateUniqueSlug(
   name: string,
   existingSlugs: string[]
 ): string {
-  const baseSlug = normalizeSlug(name) || `loja-${Date.now().toString().slice(-4)}`;
+  let baseSlug = normalizeSlug(name) || `loja-${Date.now().toString().slice(-4)}`;
+  if (RESERVED_ROUTES.has(baseSlug)) {
+    baseSlug = `${baseSlug}-loja`;
+  }
   const normalizedExisting = existingSlugs.map(s => normalizeSlug(s));
 
   if (!normalizedExisting.includes(baseSlug)) {

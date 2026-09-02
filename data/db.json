@@ -206,6 +206,210 @@
           "cardStyle": "standard"
         }
       }
+    },
+    {
+      "id": "rest-teste-burger",
+      "ownerId": "user-t1",
+      "createdAt": "2026-09-02T01:36:59.968Z",
+      "settings": {
+        "name": "Teste Burger House",
+        "slug": "teste-burger",
+        "category": "Hamburgueria",
+        "description": "Smash burgers e batatas rústicas",
+        "phone": "(11) 91111-1111",
+        "whatsapp": "11911111111",
+        "address": {
+          "street": "Av Paulista",
+          "number": "1000",
+          "neighborhood": "Bela Vista",
+          "city": "São Paulo",
+          "state": "SP"
+        },
+        "logoUrl": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=200&h=200&q=80",
+        "coverUrl": "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80",
+        "isOpenManual": true,
+        "businessHours": [],
+        "delivery": {
+          "enabled": true,
+          "feeType": "fixed",
+          "fixedFee": 7.5,
+          "estimatedTimeMin": 25,
+          "estimatedTimeMax": 40,
+          "minimumOrderValue": 0
+        },
+        "pickup": {
+          "enabled": true,
+          "estimatedTimeMin": 15,
+          "estimatedTimeMax": 20
+        },
+        "dineIn": {
+          "enabled": true
+        },
+        "paymentMethods": {
+          "pix": {
+            "enabled": true
+          },
+          "creditCard": {
+            "enabled": true
+          },
+          "debitCard": {
+            "enabled": true
+          },
+          "cash": {
+            "enabled": true
+          },
+          "mealVoucher": {
+            "enabled": false
+          }
+        },
+        "theme": {
+          "primaryColor": "#f97316",
+          "backgroundColor": "#020617",
+          "cardBackgroundColor": "#0f172a",
+          "textColor": "#f8fafc",
+          "accentColor": "#fb923c",
+          "buttonColor": "#f97316",
+          "buttonTextColor": "#020617",
+          "borderRadius": "16px",
+          "cardStyle": "standard"
+        }
+      }
+    },
+    {
+      "id": "rest-teste-pizza",
+      "ownerId": "user-t2",
+      "createdAt": "2026-09-02T01:36:59.968Z",
+      "settings": {
+        "name": "Teste Pizza & Pasta",
+        "slug": "teste-pizza",
+        "category": "Pizzaria",
+        "description": "Pizzas artesanais napolitanas no forno a lenha",
+        "phone": "(11) 92222-2222",
+        "whatsapp": "11922222222",
+        "address": {
+          "street": "Rua Augusta",
+          "number": "500",
+          "neighborhood": "Consolação",
+          "city": "São Paulo",
+          "state": "SP"
+        },
+        "logoUrl": "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=200&h=200&q=80",
+        "coverUrl": "https://images.unsplash.com/photo-1590947132387-155cc02f3212?auto=format&fit=crop&w=1200&q=80",
+        "isOpenManual": true,
+        "businessHours": [],
+        "delivery": {
+          "enabled": true,
+          "feeType": "fixed",
+          "fixedFee": 8,
+          "estimatedTimeMin": 40,
+          "estimatedTimeMax": 55,
+          "minimumOrderValue": 0
+        },
+        "pickup": {
+          "enabled": true,
+          "estimatedTimeMin": 20,
+          "estimatedTimeMax": 30
+        },
+        "dineIn": {
+          "enabled": true
+        },
+        "paymentMethods": {
+          "pix": {
+            "enabled": true
+          },
+          "creditCard": {
+            "enabled": true
+          },
+          "debitCard": {
+            "enabled": true
+          },
+          "cash": {
+            "enabled": true
+          },
+          "mealVoucher": {
+            "enabled": false
+          }
+        },
+        "theme": {
+          "primaryColor": "#ef4444",
+          "backgroundColor": "#020617",
+          "cardBackgroundColor": "#0f172a",
+          "textColor": "#f8fafc",
+          "accentColor": "#f87171",
+          "buttonColor": "#ef4444",
+          "buttonTextColor": "#ffffff",
+          "borderRadius": "16px",
+          "cardStyle": "standard"
+        }
+      }
+    },
+    {
+      "id": "rest-teste-sushi",
+      "ownerId": "user-t3",
+      "createdAt": "2026-09-02T01:36:59.968Z",
+      "settings": {
+        "name": "Teste Sushi Premium",
+        "slug": "teste-sushi",
+        "category": "Japonesa",
+        "description": "Combinados frescos e sushis contemporâneos",
+        "phone": "(11) 93333-3333",
+        "whatsapp": "11933333333",
+        "address": {
+          "street": "Rua dos Pinheiros",
+          "number": "789",
+          "neighborhood": "Pinheiros",
+          "city": "São Paulo",
+          "state": "SP"
+        },
+        "logoUrl": "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=200&h=200&q=80",
+        "coverUrl": "https://images.unsplash.com/photo-1611143669185-af224c5e3252?auto=format&fit=crop&w=1200&q=80",
+        "isOpenManual": true,
+        "businessHours": [],
+        "delivery": {
+          "enabled": true,
+          "feeType": "fixed",
+          "fixedFee": 10,
+          "estimatedTimeMin": 35,
+          "estimatedTimeMax": 50,
+          "minimumOrderValue": 0
+        },
+        "pickup": {
+          "enabled": true,
+          "estimatedTimeMin": 20,
+          "estimatedTimeMax": 30
+        },
+        "dineIn": {
+          "enabled": true
+        },
+        "paymentMethods": {
+          "pix": {
+            "enabled": true
+          },
+          "creditCard": {
+            "enabled": true
+          },
+          "debitCard": {
+            "enabled": true
+          },
+          "cash": {
+            "enabled": false
+          },
+          "mealVoucher": {
+            "enabled": true
+          }
+        },
+        "theme": {
+          "primaryColor": "#06b6d4",
+          "backgroundColor": "#020617",
+          "cardBackgroundColor": "#0f172a",
+          "textColor": "#f8fafc",
+          "accentColor": "#22d3ee",
+          "buttonColor": "#06b6d4",
+          "buttonTextColor": "#020617",
+          "borderRadius": "16px",
+          "cardStyle": "standard"
+        }
+      }
     }
   ],
   "categories": [
@@ -245,6 +449,27 @@
       "id": "cat-bm-1",
       "restaurantId": "rest-bm-lanches-123",
       "name": "Lanches Especiais",
+      "order": 1,
+      "isActive": true
+    },
+    {
+      "id": "cat-tb-1",
+      "restaurantId": "rest-teste-burger",
+      "name": "Smash Burgers",
+      "order": 1,
+      "isActive": true
+    },
+    {
+      "id": "cat-tp-1",
+      "restaurantId": "rest-teste-pizza",
+      "name": "Pizzas Clássicas",
+      "order": 1,
+      "isActive": true
+    },
+    {
+      "id": "cat-ts-1",
+      "restaurantId": "rest-teste-sushi",
+      "name": "Combinados do Chef",
       "order": 1,
       "isActive": true
     }
@@ -449,6 +674,36 @@
       "isAvailable": true,
       "isFeatured": true,
       "order": 1
+    },
+    {
+      "id": "prod-tb-1",
+      "restaurantId": "rest-teste-burger",
+      "categoryId": "cat-tb-1",
+      "name": "Duplo Smash Burger Bacon",
+      "price": 29.9,
+      "order": 1,
+      "isAvailable": true,
+      "isFeatured": true
+    },
+    {
+      "id": "prod-tp-1",
+      "restaurantId": "rest-teste-pizza",
+      "categoryId": "cat-tp-1",
+      "name": "Pizza Margherita DOC",
+      "price": 54,
+      "order": 1,
+      "isAvailable": true,
+      "isFeatured": true
+    },
+    {
+      "id": "prod-ts-1",
+      "restaurantId": "rest-teste-sushi",
+      "categoryId": "cat-ts-1",
+      "name": "Combo Salmão Supreme 20 Peças",
+      "price": 68,
+      "order": 1,
+      "isAvailable": true,
+      "isFeatured": true
     }
   ],
   "addonGroups": [
@@ -557,7 +812,7 @@
       "id": "ord-101",
       "orderNumber": "#1024",
       "restaurantId": "rest-burger-house",
-      "createdAt": "2026-09-02T01:01:16.829Z",
+      "createdAt": "2026-09-01T21:21:15.871Z",
       "customer": {
         "name": "João Silva",
         "phone": "(11) 99887-1122"
@@ -619,7 +874,7 @@
       "id": "ord-102",
       "orderNumber": "#1023",
       "restaurantId": "rest-burger-house",
-      "createdAt": "2026-09-02T00:06:16.829Z",
+      "createdAt": "2026-09-01T20:26:15.871Z",
       "customer": {
         "name": "Mariana Costa",
         "phone": "(11) 97711-3344"
@@ -658,7 +913,7 @@
       "id": "ord-103",
       "orderNumber": "#1022",
       "restaurantId": "rest-burger-house",
-      "createdAt": "2026-09-01T22:46:16.829Z",
+      "createdAt": "2026-09-01T19:06:15.871Z",
       "customer": {
         "name": "Lucas Ferreira",
         "phone": "(11) 98844-5566"

@@ -16,7 +16,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../common/Toast';
 import { StorageService } from '../../services/storage';
-import { normalizeSlug, getRestaurantPublicUrl } from '../../services/restaurantUrl';
+import { normalizeSlug, getRestaurantPublicUrl, RESERVED_ROUTES } from '../../services/restaurantUrl';
 import { Restaurant, BusinessHour, PaymentSettings, DeliverySettings, RestaurantCategory } from '../../types';
 
 const CATEGORIES_LIST: RestaurantCategory[] = [
@@ -87,6 +87,11 @@ export const SettingsTab: React.FC = () => {
     e.preventDefault();
 
     const cleanSlug = normalizeSlug(slug) || normalizeSlug(name) || currentRestaurant.settings.slug;
+
+    if (RESERVED_ROUTES.has(cleanSlug)) {
+      showToast('⚠️ Este link/slug é uma palavra reservada do sistema. Por favor, escolha outro.');
+      return;
+    }
 
     // Check if another restaurant uses this slug
     const existingWithSlug = StorageService.getRestaurantBySlug(cleanSlug);
@@ -195,7 +200,7 @@ export const SettingsTab: React.FC = () => {
                   Link / Slug do Cardápio
                 </label>
                 <div className="flex items-center rounded-xl bg-slate-950 border border-slate-700 px-3 py-1.5 text-xs text-slate-400">
-                  <span className="text-[11px] select-none">/r/</span>
+                  <span className="text-[11px] select-none">/</span>
                   <input
                     type="text"
                     value={slug}
